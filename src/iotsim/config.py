@@ -37,6 +37,9 @@ class DeviceSettings(CommonSettings):
     ca_file: Path | None = Field(default=None, description="CA para validar o servidor (TLS)")
     topic_prefix: str = "sensors"
     mqtt_qos: int = Field(default=0, ge=0, le=2)
+    coap_confirmable: bool = Field(
+        default=False, description="CoAP: CON (com ACK e retransmissão) ou NON"
+    )
 
 
 class SinkSettings(CommonSettings):

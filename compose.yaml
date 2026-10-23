@@ -1,4 +1,4 @@
-# Pilha de simulação — fase 1: MQTT e HTTP + InfluxDB/Grafana.
+# Pilha de simulação: MQTT, HTTP e CoAP + InfluxDB/Grafana.
 # Uso: cp .env.example .env && docker compose up -d --build
 
 x-iotsim: &iotsim
@@ -107,6 +107,25 @@ services:
       IOTSIM_PORT: 8080
     depends_on:
       http-server: { condition: service_healthy }
+
+  # ---------- CoAP (UDP) ----------
+  coap-server:
+    <<: *iotsim
+    command: ["iotsim-coap-server"]
+    environment:
+      <<: [*iotsim-env, *sink-env]
+      IOTSIM_LISTEN_PORT: 5683
+    depends_on: [influxdb]
+
+  coap-devices:
+    <<: *iotsim
+    command: ["iotsim-device"]
+    environment:
+      <<: [*iotsim-env, *device-env]
+      IOTSIM_PROTOCOL: coap
+      IOTSIM_HOST: coap-server
+      IOTSIM_COAP_CONFIRMABLE: ${IOTSIM_COAP_CONFIRMABLE:-false}
+    depends_on: [coap-server]
 
 volumes:
   influxdb-data:

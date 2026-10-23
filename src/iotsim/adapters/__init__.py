@@ -17,6 +17,17 @@ def build_adapter(settings: DeviceSettings, device_id: str) -> ProtocolAdapter:
             from iotsim.adapters.http import HttpAdapter
 
             return HttpAdapter(device_id, settings.host, port, settings.tls, settings.ca_file)
+        case Protocol.COAP:
+            from iotsim.adapters.coap import CoapAdapter
+
+            return CoapAdapter(
+                device_id,
+                settings.host,
+                port,
+                settings.tls,
+                settings.ca_file,
+                settings.coap_confirmable,
+            )
         case _:
             raise NotImplementedError(f"protocolo ainda não implementado: {settings.protocol}")
 

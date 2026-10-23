@@ -7,6 +7,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "aiocoap>=0.4.17",
     "aiomqtt>=2.5.1",
     "fastapi>=0.161.1",
     "httpx>=0.28.1",
@@ -32,6 +33,7 @@ dev = [
 iotsim-device = "iotsim.devices.cli:main"
 iotsim-http-server = "iotsim.servers.http_server:main"
 iotsim-mqtt-consumer = "iotsim.servers.mqtt_consumer:main"
+iotsim-coap-server = "iotsim.servers.coap_server:main"
 
 [tool.ruff]
 line-length = 100
@@ -50,6 +52,16 @@ mypy_path = "src"
 # influxdb-client não publica anotações de tipo completas.
 module = ["iotsim.sink"]
 disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+# aiocoap não publica py.typed.
+module = ["aiocoap", "aiocoap.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Recursos CoAP precisam herdar das classes (não tipadas) do aiocoap.
+module = ["iotsim.servers.coap_server"]
+disallow_subclassing_any = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

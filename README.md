@@ -10,7 +10,8 @@ dando continuidade ao estudo dirigido (Nota 2), que estimou o overhead apenas an
  simuladores (1 container por protocolo, N dispositivos asyncio)
    mqtt-devices ──► mosquitto ──► mqtt-consumer ─┐
    http-devices ──────────────► http-server ─────┤
-   (CoAP, AMQP, WebSocket — próximas fases)      │
+   coap-devices ───── UDP ────► coap-server ─────┤
+   (AMQP, WebSocket — próximas fases)            │
                                                  ▼
                       data/<run_id>/*.csv (dados brutos → análise do artigo)
                       InfluxDB 2.7 ──► Grafana (visualização)
@@ -42,7 +43,7 @@ make up        # sobe a pilha (cria .env a partir de .env.example)
 - Dados brutos: `data/<IOTSIM_RUN_ID>/`.
 
 Parâmetros (variáveis `IOTSIM_*` no `.env`): `RUN_ID`, `DEVICES`, `INTERVAL_S`, `SEED`,
-`MQTT_QOS`, `LOG_LEVEL`.
+`MQTT_QOS`, `COAP_CONFIRMABLE` (CON/NON), `LOG_LEVEL`.
 
 ## Estrutura
 
@@ -65,6 +66,6 @@ tests/             testes unitários
 |---|---|---|---|
 | MQTT | ✅ | ✅ | pendente |
 | HTTP | ✅ | ✅ | pendente |
-| CoAP | pendente | pendente | DTLS a avaliar |
+| CoAP (NON/CON) | ✅ | ✅ | DTLS a avaliar |
 | AMQP 1.0 | pendente | pendente | pendente |
 | WebSocket | pendente | pendente | pendente |
