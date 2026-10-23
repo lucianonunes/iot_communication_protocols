@@ -1,4 +1,4 @@
-# Pilha de simulação: MQTT, HTTP, CoAP e AMQP 1.0 + InfluxDB/Grafana.
+# Pilha de simulação: MQTT, HTTP, CoAP, AMQP 1.0 e WebSocket + InfluxDB/Grafana.
 # Uso: cp .env.example .env && docker compose up -d --build
 
 x-iotsim: &iotsim
@@ -167,6 +167,25 @@ services:
       IOTSIM_PASSWORD: ${AMQP_PASSWORD}
       IOTSIM_AMQP_CONFIRM: ${IOTSIM_AMQP_CONFIRM:-true}
     depends_on: [amqp-consumer]
+
+  # ---------- WebSocket ----------
+  ws-server:
+    <<: *iotsim
+    command: ["iotsim-ws-server"]
+    environment:
+      <<: [*iotsim-env, *sink-env]
+      IOTSIM_LISTEN_PORT: 8081
+    depends_on: [influxdb]
+
+  ws-devices:
+    <<: *iotsim
+    command: ["iotsim-device"]
+    environment:
+      <<: [*iotsim-env, *device-env]
+      IOTSIM_PROTOCOL: ws
+      IOTSIM_HOST: ws-server
+      IOTSIM_PORT: 8081
+    depends_on: [ws-server]
 
 volumes:
   influxdb-data:

@@ -12,7 +12,7 @@ dando continuidade ao estudo dirigido (Nota 2), que estimou o overhead apenas an
    http-devices ──────────────► http-server ─────┤
    coap-devices ───── UDP ────► coap-server ─────┤
    amqp-devices ──► rabbitmq ───► amqp-consumer ─┤
-   (WebSocket — próxima fase)                    │
+   ws-devices ─── quadros ────► ws-server ───────┤
                                                  ▼
                       data/<run_id>/*.csv (dados brutos → análise do artigo)
                       InfluxDB 2.7 ──► Grafana (visualização)
@@ -31,6 +31,9 @@ Princípios de medição:
 - AMQP 1.0 no RabbitMQ 4.x: envio ao exchange `amq.topic` pelo endereço v2
   `/exchanges/amq.topic/<routing-key>` (destino fixado no *attach* do enlace); a fila
   `iotsim.telemetry` recebe `sensors.#`.
+- WebSocket: conexão persistente por dispositivo, recurso fixado no handshake e um quadro
+  binário por leitura, sem compressão (`permessage-deflate` desativado). Sem confirmação
+  nativa: o envio termina quando o quadro é entregue ao TCP.
 
 ## Uso
 
@@ -74,4 +77,4 @@ tests/             testes (AMQP: integração, requer IOTSIM_TEST_AMQP_URL)
 | HTTP | ✅ | ✅ | pendente |
 | CoAP (NON/CON) | ✅ | ✅ | DTLS a avaliar |
 | AMQP 1.0 | ✅ | ✅ | pendente |
-| WebSocket | pendente | pendente | pendente |
+| WebSocket | ✅ | ✅ | pendente |

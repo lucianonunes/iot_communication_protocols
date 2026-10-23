@@ -41,6 +41,10 @@ def build_adapter(settings: DeviceSettings, device_id: str) -> ProtocolAdapter:
                 password=settings.password.get_secret_value() if settings.password else None,
                 confirm=settings.amqp_confirm,
             )
+        case Protocol.WS:
+            from iotsim.adapters.ws import WsAdapter
+
+            return WsAdapter(device_id, settings.host, port, settings.tls, settings.ca_file)
         case _:
             raise NotImplementedError(f"protocolo ainda não implementado: {settings.protocol}")
 
