@@ -11,7 +11,8 @@ dando continuidade ao estudo dirigido (Nota 2), que estimou o overhead apenas an
    mqtt-devices ──► mosquitto ──► mqtt-consumer ─┐
    http-devices ──────────────► http-server ─────┤
    coap-devices ───── UDP ────► coap-server ─────┤
-   (AMQP, WebSocket — próximas fases)            │
+   amqp-devices ──► rabbitmq ───► amqp-consumer ─┤
+   (WebSocket — próxima fase)                    │
                                                  ▼
                       data/<run_id>/*.csv (dados brutos → análise do artigo)
                       InfluxDB 2.7 ──► Grafana (visualização)
@@ -25,8 +26,11 @@ Princípios de medição:
   `recv_<proto>.csv` (chegada). Latência = `recv_ns − sent_ns`; entrega = recebidas / enviadas.
   Todos os containers compartilham o relógio do mesmo host (VM do Docker), o que torna a
   diferença de timestamps válida.
-- No MQTT a latência inclui dois saltos (dispositivo → broker → assinante), característica
-  do modelo publicação–assinatura.
+- No MQTT e no AMQP a latência inclui dois saltos (dispositivo → broker → consumidor),
+  característica do modelo publicação–assinatura.
+- AMQP 1.0 no RabbitMQ 4.x: envio ao exchange `amq.topic` pelo endereço v2
+  `/exchanges/amq.topic/<routing-key>` (destino fixado no *attach* do enlace); a fila
+  `iotsim.telemetry` recebe `sensors.#`.
 
 ## Uso
 
@@ -40,10 +44,12 @@ make up        # sobe a pilha (cria .env a partir de .env.example)
 
 - Grafana: <http://localhost:3000> (credenciais no `.env`) → pasta *IoT Protocols*.
 - InfluxDB: <http://localhost:8086>.
+- RabbitMQ (console): <http://localhost:15672> (`AMQP_USER`/`AMQP_PASSWORD` do `.env`).
 - Dados brutos: `data/<IOTSIM_RUN_ID>/`.
 
 Parâmetros (variáveis `IOTSIM_*` no `.env`): `RUN_ID`, `DEVICES`, `INTERVAL_S`, `SEED`,
-`MQTT_QOS`, `COAP_CONFIRMABLE` (CON/NON), `LOG_LEVEL`.
+`MQTT_QOS`, `COAP_CONFIRMABLE` (CON/NON), `AMQP_CONFIRM` (liquidado/pré-liquidado),
+`LOG_LEVEL`.
 
 ## Estrutura
 
@@ -56,8 +62,8 @@ src/iotsim/
   adapters/        um ProtocolAdapter por protocolo (lado dispositivo)
   devices/         execução da frota de dispositivos e CLI
   servers/         receptores (servidores e consumidores)
-infra/             Mosquitto, provisionamento do Grafana
-tests/             testes unitários
+infra/             Mosquitto, RabbitMQ, provisionamento do Grafana
+tests/             testes (AMQP: integração, requer IOTSIM_TEST_AMQP_URL)
 ```
 
 ## Situação
@@ -67,5 +73,5 @@ tests/             testes unitários
 | MQTT | ✅ | ✅ | pendente |
 | HTTP | ✅ | ✅ | pendente |
 | CoAP (NON/CON) | ✅ | ✅ | DTLS a avaliar |
-| AMQP 1.0 | pendente | pendente | pendente |
+| AMQP 1.0 | ✅ | ✅ | pendente |
 | WebSocket | pendente | pendente | pendente |

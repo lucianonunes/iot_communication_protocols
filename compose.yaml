@@ -1,4 +1,4 @@
-# Pilha de simulação: MQTT, HTTP e CoAP + InfluxDB/Grafana.
+# Pilha de simulação: MQTT, HTTP, CoAP e AMQP 1.0 + InfluxDB/Grafana.
 # Uso: cp .env.example .env && docker compose up -d --build
 
 x-iotsim: &iotsim
@@ -126,6 +126,47 @@ services:
       IOTSIM_HOST: coap-server
       IOTSIM_COAP_CONFIRMABLE: ${IOTSIM_COAP_CONFIRMABLE:-false}
     depends_on: [coap-server]
+
+  # ---------- AMQP 1.0 ----------
+  rabbitmq:
+    image: rabbitmq:4.1.4-management
+    restart: unless-stopped
+    entrypoint: ["/usr/local/bin/iotsim-entrypoint.sh"]
+    command: ["rabbitmq-server"]
+    ports: ["15672:15672"]  # console de gestão
+    environment:
+      AMQP_USER: ${AMQP_USER}
+      AMQP_PASSWORD: ${AMQP_PASSWORD}
+    volumes:
+      - ./infra/rabbitmq/entrypoint.sh:/usr/local/bin/iotsim-entrypoint.sh:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-iotsim.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      retries: 20
+
+  amqp-consumer:
+    <<: *iotsim
+    command: ["iotsim-amqp-consumer"]
+    environment:
+      <<: [*iotsim-env, *sink-env]
+      IOTSIM_BROKER_HOST: rabbitmq
+      IOTSIM_USERNAME: ${AMQP_USER}
+      IOTSIM_PASSWORD: ${AMQP_PASSWORD}
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+
+  amqp-devices:
+    <<: *iotsim
+    command: ["iotsim-device"]
+    environment:
+      <<: [*iotsim-env, *device-env]
+      IOTSIM_PROTOCOL: amqp
+      IOTSIM_HOST: rabbitmq
+      IOTSIM_USERNAME: ${AMQP_USER}
+      IOTSIM_PASSWORD: ${AMQP_PASSWORD}
+      IOTSIM_AMQP_CONFIRM: ${IOTSIM_AMQP_CONFIRM:-true}
+    depends_on: [amqp-consumer]
 
 volumes:
   influxdb-data:

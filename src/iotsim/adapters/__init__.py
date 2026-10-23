@@ -28,6 +28,19 @@ def build_adapter(settings: DeviceSettings, device_id: str) -> ProtocolAdapter:
                 settings.ca_file,
                 settings.coap_confirmable,
             )
+        case Protocol.AMQP:
+            from iotsim.adapters.amqp import AmqpAdapter
+
+            return AmqpAdapter(
+                device_id,
+                settings.host,
+                port,
+                settings.tls,
+                settings.ca_file,
+                username=settings.username,
+                password=settings.password.get_secret_value() if settings.password else None,
+                confirm=settings.amqp_confirm,
+            )
         case _:
             raise NotImplementedError(f"protocolo ainda não implementado: {settings.protocol}")
 

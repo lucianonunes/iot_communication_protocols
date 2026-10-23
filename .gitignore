@@ -221,3 +221,6 @@ __marimo__/
 
 # Resultados brutos dos experimentos
 data/
+
+# Configuração versionada do broker AMQP (o padrão acima ignora qualquer pasta rabbitmq/)
+!infra/rabbitmq/

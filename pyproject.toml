@@ -13,6 +13,7 @@ dependencies = [
     "httpx>=0.28.1",
     "influxdb-client[async]>=1.50.0",
     "pydantic-settings>=2.16.1",
+    "python-qpid-proton>=0.40.0",
     "uvicorn>=0.54.0",
 ]
 
@@ -34,6 +35,7 @@ iotsim-device = "iotsim.devices.cli:main"
 iotsim-http-server = "iotsim.servers.http_server:main"
 iotsim-mqtt-consumer = "iotsim.servers.mqtt_consumer:main"
 iotsim-coap-server = "iotsim.servers.coap_server:main"
+iotsim-amqp-consumer = "iotsim.servers.amqp_consumer:main"
 
 [tool.ruff]
 line-length = 100

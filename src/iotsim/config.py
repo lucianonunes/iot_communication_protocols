@@ -3,7 +3,7 @@
 from enum import StrEnum
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +40,11 @@ class DeviceSettings(CommonSettings):
     coap_confirmable: bool = Field(
         default=False, description="CoAP: CON (com ACK e retransmissão) ou NON"
     )
+    amqp_confirm: bool = Field(
+        default=True, description="AMQP: aguarda a liquidação pelo broker ou envia pré-liquidado"
+    )
+    username: str | None = None
+    password: SecretStr | None = None
 
 
 class SinkSettings(CommonSettings):
@@ -64,6 +69,9 @@ class ReceiverSettings(SinkSettings):
     tls_cert: Path | None = None
     tls_key: Path | None = None
     topic_prefix: str = "sensors"
+    username: str | None = None
+    password: SecretStr | None = None
+    amqp_queue: str = "iotsim.telemetry"
 
 
 DEFAULT_PORTS: dict[Protocol, tuple[int, int]] = {
