@@ -3,9 +3,11 @@
 import asyncio
 import logging
 import signal
+import socket
 import time
 
 from aiocoap import CHANGED, Context, Message
+from aiocoap.credentials import CredentialsMap
 from aiocoap.resource import PathCapable, Resource, Site
 
 from iotsim.config import DEFAULT_PORTS, Protocol, ReceiverSettings
@@ -35,16 +37,47 @@ def build_site(settings: ReceiverSettings, sink: ReceiveSink) -> Site:
     return site
 
 
+async def _create_context(settings: ReceiverSettings, site: Site) -> tuple[Context, str, int]:
+    plain, secure = DEFAULT_PORTS[Protocol.COAP]
+    if not settings.tls:
+        port = settings.listen_port or plain
+        context = await Context.create_server_context(site, bind=(settings.listen_host, port))
+        return context, "udp", port
+
+    if settings.coap_psk is None:
+        raise ValueError("CoAP sobre DTLS requer a chave pré-compartilhada (IOTSIM_COAP_PSK)")
+    credentials = CredentialsMap()
+    credentials.load_from_dict(
+        {
+            ":device": {
+                "dtls": {
+                    "psk": {"ascii": settings.coap_psk.get_secret_value()},
+                    "client-identity": {"ascii": settings.coap_psk_identity},
+                }
+            }
+        }
+    )
+    port = settings.listen_port or secure
+    # O transporte DTLS do aiocoap não aceita o endereço genérico (precisa responder do mesmo
+    # endereço em que recebeu); no container, usa-se o IP do próprio host na rede Docker.
+    host = settings.listen_host
+    if host in ("0.0.0.0", "::", ""):
+        host = socket.gethostbyname(socket.gethostname())
+    # O transporte DTLS do aiocoap soma (5684 - 5683) à porta de bind; por isso o bind
+    # recebe a porta desejada menos esse deslocamento.
+    context = await Context.create_server_context(
+        site,
+        bind=(host, port - (secure - plain)),
+        server_credentials=credentials,
+        transports=["tinydtls_server"],
+    )
+    return context, "dtls", port
+
+
 async def serve(settings: ReceiverSettings, stop: asyncio.Event) -> None:
-    if settings.tls:
-        raise NotImplementedError("CoAP sobre DTLS ainda não suportado")
-    plain, _ = DEFAULT_PORTS[Protocol.COAP]
-    port = settings.listen_port or plain
     async with ReceiveSink(Protocol.COAP, settings) as sink:
-        context = await Context.create_server_context(
-            build_site(settings, sink), bind=(settings.listen_host, port)
-        )
-        log.info("servidor CoAP em udp://%s:%d", settings.listen_host, port)
+        context, transport, port = await _create_context(settings, build_site(settings, sink))
+        log.info("servidor CoAP em %s://%s:%d", transport, settings.listen_host, port)
         try:
             await stop.wait()
         finally:

@@ -40,6 +40,6 @@ async def test_coap_roundtrip_records_reading(tmp_path: Path, confirmable: bool)
     assert all(int(r["payload_bytes"]) == len(payloads[0]) for r in rows)
 
 
-def test_coap_tls_not_supported_yet() -> None:
-    with pytest.raises(NotImplementedError):
+def test_coap_dtls_requires_psk() -> None:
+    with pytest.raises(ValueError, match="IOTSIM_COAP_PSK"):
         CoapAdapter("coap-0000", "127.0.0.1", PORT, True, None)

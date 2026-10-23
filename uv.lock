@@ -477,6 +477,12 @@ wheels = [
 ]
 
 [[package]]
+name = "dtlssocket"
+version = "0.2.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/4c/aca9c842a1a3fdd05c973761ff154457663094f14f8a7edf2d5e3e073aee/dtlssocket-0.2.3.tar.gz", hash = "sha256:f06cbe32df8562dbbccbe274aaf27d2773e8492a86c41c334b3a0a70a50037cf", size = 181850, upload-time = "2025-07-24T13:38:44.159Z" }
+
+[[package]]
 name = "fastapi"
 version = "0.161.1"
 source = { registry = "https://pypi.org/simple" }
@@ -692,6 +698,11 @@ dependencies = [
     { name = "websockets" },
 ]
 
+[package.optional-dependencies]
+dtls = [
+    { name = "dtlssocket" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
@@ -705,6 +716,7 @@ dev = [
 requires-dist = [
     { name = "aiocoap", specifier = ">=0.4.17" },
     { name = "aiomqtt", specifier = ">=2.5.1" },
+    { name = "dtlssocket", marker = "extra == 'dtls'", specifier = "==0.2.3" },
     { name = "fastapi", specifier = ">=0.161.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "influxdb-client", extras = ["async"], specifier = ">=1.50.0" },
@@ -713,6 +725,7 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.54.0" },
     { name = "websockets", specifier = ">=17.3" },
 ]
+provides-extras = ["dtls"]
 
 [package.metadata.requires-dev]
 dev = [

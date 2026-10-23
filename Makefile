@@ -1,4 +1,4 @@
-.PHONY: help install lint typecheck test check up down logs clean
+.PHONY: help install lint typecheck test check certs up up-tls down logs clean
 
 help:  ## Lista os alvos disponíveis
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -22,16 +22,23 @@ check: lint typecheck test  ## Todas as verificações
 .env:
 	cp .env.example .env
 
-up: .env  ## Sobe a pilha (simuladores, servidores, InfluxDB, Grafana)
+certs:  ## Gera a CA própria e o certificado do servidor (infra/certs)
+	./scripts/gen-certs.sh infra/certs
+
+up: .env certs  ## Sobe a pilha sem TLS (simuladores, servidores, InfluxDB, Grafana)
 	mkdir -p data
 	docker compose up -d --build
 
+up-tls: .env certs  ## Sobe a pilha com TLS/DTLS em todos os protocolos
+	mkdir -p data
+	docker compose -f compose.yaml -f compose.tls.yaml up -d --build
+
 down:  ## Para a pilha (mantém os volumes)
-	docker compose down
+	docker compose -f compose.yaml -f compose.tls.yaml down
 
 logs:  ## Acompanha os logs
 	docker compose logs -f --tail 50
 
 clean:  ## Para a pilha e apaga volumes e dados brutos
-	docker compose down -v
+	docker compose -f compose.yaml -f compose.tls.yaml down -v
 	rm -rf data

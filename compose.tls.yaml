@@ -1,0 +1,52 @@
+# Variante com TLS/DTLS: sobrepõe compose.yaml.
+# Uso: docker compose -f compose.yaml -f compose.tls.yaml up -d
+# Portas convencionais do Quadro 1 da Nota 2: MQTT 8883, HTTPS 443, CoAP/DTLS 5684,
+# AMQP 5671, WSS 443. Certificados: scripts/gen-certs.sh (CoAP usa PSK, não certificado).
+
+x-tls-device: &tls-device
+  IOTSIM_TLS: "true"
+  IOTSIM_CA_FILE: /app/certs/ca.crt
+
+x-tls-server: &tls-server
+  IOTSIM_TLS: "true"
+  IOTSIM_CA_FILE: /app/certs/ca.crt
+  IOTSIM_TLS_CERT: /app/certs/server.crt
+  IOTSIM_TLS_KEY: /app/certs/server.key
+
+services:
+  mqtt-consumer:
+    environment: *tls-server
+  mqtt-devices:
+    environment: *tls-device
+
+  http-server:
+    environment:
+      <<: *tls-server
+      IOTSIM_LISTEN_PORT: 443
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://localhost/health', context=ssl.create_default_context(cafile='/app/certs/ca.crt'))"]
+  http-devices:
+    environment:
+      <<: *tls-device
+      IOTSIM_PORT: 443
+
+  coap-server:
+    environment:
+      <<: *tls-server
+      IOTSIM_LISTEN_PORT: 5684
+  coap-devices:
+    environment: *tls-device
+
+  amqp-consumer:
+    environment: *tls-server
+  amqp-devices:
+    environment: *tls-device
+
+  ws-server:
+    environment:
+      <<: *tls-server
+      IOTSIM_LISTEN_PORT: 443
+  ws-devices:
+    environment:
+      <<: *tls-device
+      IOTSIM_PORT: 443

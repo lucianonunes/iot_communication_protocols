@@ -27,6 +27,8 @@ def build_adapter(settings: DeviceSettings, device_id: str) -> ProtocolAdapter:
                 settings.tls,
                 settings.ca_file,
                 settings.coap_confirmable,
+                psk=settings.coap_psk.get_secret_value() if settings.coap_psk else None,
+                psk_identity=settings.coap_psk_identity,
             )
         case Protocol.AMQP:
             from iotsim.adapters.amqp import AmqpAdapter

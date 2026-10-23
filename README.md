@@ -35,6 +35,29 @@ Princípios de medição:
   binário por leitura, sem compressão (`permessage-deflate` desativado). Sem confirmação
   nativa: o envio termina quando o quadro é entregue ao TCP.
 
+## TLS/DTLS
+
+A segurança é uma variável experimental: a mesma pilha roda com ou sem criptografia.
+
+```bash
+make up       # sem TLS
+make up-tls   # com TLS/DTLS (compose.yaml + compose.tls.yaml)
+```
+
+| Protocolo | Porta | Mecanismo |
+|---|---|---|
+| MQTT | 8883 | TLS 1.2+, CA própria (`scripts/gen-certs.sh`) |
+| HTTPS | 443 | TLS, CA própria |
+| WSS | 443 | TLS, CA própria |
+| AMQP 1.0 | 5671 | TLS + SASL PLAIN |
+| CoAP | 5684 | DTLS 1.2 com chave pré-compartilhada (PSK, `COAP_PSK`) |
+
+- O CoAP usa PSK, e não certificado, porque o transporte DTLS do aiocoap (tinydtls) só
+  suporta PSK; é também o perfil típico de nós restritos (RFC 7925).
+- O DTLS depende do pacote `DTLSSocket` (extra `dtls`), compilado na imagem Docker. No
+  ambiente local ele é opcional (`uv sync --extra dtls` exige autotools).
+- Os certificados ficam em `infra/certs/` (não versionado) e são gerados por `make certs`.
+
 ## Uso
 
 Requisitos: Docker (Compose v2+), [uv](https://docs.astral.sh/uv/) e Python 3.12.
@@ -42,7 +65,7 @@ Requisitos: Docker (Compose v2+), [uv](https://docs.astral.sh/uv/) e Python 3.12
 ```bash
 make install   # dependências + hooks
 make check     # ruff + mypy (strict) + pytest
-make up        # sobe a pilha (cria .env a partir de .env.example)
+make up        # sobe a pilha sem TLS (cria .env e certificados)
 ```
 
 - Grafana: <http://localhost:3000> (credenciais no `.env`) → pasta *IoT Protocols*.
@@ -66,15 +89,16 @@ src/iotsim/
   devices/         execução da frota de dispositivos e CLI
   servers/         receptores (servidores e consumidores)
 infra/             Mosquitto, RabbitMQ, provisionamento do Grafana
+scripts/           geração da CA e do certificado do servidor
 tests/             testes (AMQP: integração, requer IOTSIM_TEST_AMQP_URL)
 ```
 
 ## Situação
 
-| Protocolo | Dispositivo | Receptor | TLS |
+| Protocolo | Dispositivo | Receptor | TLS/DTLS |
 |---|---|---|---|
-| MQTT | ✅ | ✅ | pendente |
-| HTTP | ✅ | ✅ | pendente |
-| CoAP (NON/CON) | ✅ | ✅ | DTLS a avaliar |
-| AMQP 1.0 | ✅ | ✅ | pendente |
-| WebSocket | ✅ | ✅ | pendente |
+| MQTT | ✅ | ✅ | ✅ |
+| HTTP | ✅ | ✅ | ✅ |
+| CoAP (NON/CON) | ✅ | ✅ | ✅ DTLS-PSK |
+| AMQP 1.0 | ✅ | ✅ | ✅ |
+| WebSocket | ✅ | ✅ | ✅ |

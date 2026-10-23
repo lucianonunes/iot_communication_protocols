@@ -45,6 +45,10 @@ class DeviceSettings(CommonSettings):
     )
     username: str | None = None
     password: SecretStr | None = None
+    coap_psk: SecretStr | None = Field(
+        default=None, description="CoAP/DTLS: chave pré-compartilhada"
+    )
+    coap_psk_identity: str = "iotsim"
 
 
 class SinkSettings(CommonSettings):
@@ -72,6 +76,8 @@ class ReceiverSettings(SinkSettings):
     username: str | None = None
     password: SecretStr | None = None
     amqp_queue: str = "iotsim.telemetry"
+    coap_psk: SecretStr | None = None
+    coap_psk_identity: str = "iotsim"
 
 
 DEFAULT_PORTS: dict[Protocol, tuple[int, int]] = {

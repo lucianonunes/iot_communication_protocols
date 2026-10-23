@@ -224,3 +224,6 @@ data/
 
 # Configuração versionada do broker AMQP (o padrão acima ignora qualquer pasta rabbitmq/)
 !infra/rabbitmq/
+
+# Certificados gerados localmente (scripts/gen-certs.sh)
+infra/certs/

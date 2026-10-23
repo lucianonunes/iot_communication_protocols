@@ -39,6 +39,11 @@ iotsim-coap-server = "iotsim.servers.coap_server:main"
 iotsim-amqp-consumer = "iotsim.servers.amqp_consumer:main"
 iotsim-ws-server = "iotsim.servers.ws_server:main"
 
+[project.optional-dependencies]
+dtls = [
+    "dtlssocket==0.2.3",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

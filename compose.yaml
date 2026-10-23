@@ -7,6 +7,7 @@ x-iotsim: &iotsim
   restart: unless-stopped
   volumes:
     - ./data:/app/data
+    - ./infra/certs:/app/certs:ro
   environment: &iotsim-env
     IOTSIM_RUN_ID: ${IOTSIM_RUN_ID:-dev}
     IOTSIM_LOG_LEVEL: ${IOTSIM_LOG_LEVEL:-INFO}
@@ -65,6 +66,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infra/certs:/mosquitto/certs:ro
 
   mqtt-consumer:
     <<: *iotsim
@@ -115,6 +117,7 @@ services:
     environment:
       <<: [*iotsim-env, *sink-env]
       IOTSIM_LISTEN_PORT: 5683
+      IOTSIM_COAP_PSK: ${COAP_PSK}
     depends_on: [influxdb]
 
   coap-devices:
@@ -125,6 +128,7 @@ services:
       IOTSIM_PROTOCOL: coap
       IOTSIM_HOST: coap-server
       IOTSIM_COAP_CONFIRMABLE: ${IOTSIM_COAP_CONFIRMABLE:-false}
+      IOTSIM_COAP_PSK: ${COAP_PSK}
     depends_on: [coap-server]
 
   # ---------- AMQP 1.0 ----------
@@ -140,6 +144,7 @@ services:
     volumes:
       - ./infra/rabbitmq/entrypoint.sh:/usr/local/bin/iotsim-entrypoint.sh:ro
       - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-iotsim.conf:ro
+      - ./infra/certs:/etc/iotsim/certs:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
