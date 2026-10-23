@@ -1,0 +1,8 @@
+apiVersion: 1
+
+providers:
+  - name: iotsim
+    folder: IoT Protocols
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

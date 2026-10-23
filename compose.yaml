@@ -1,0 +1,113 @@
+# Pilha de simulação — fase 1: MQTT e HTTP + InfluxDB/Grafana.
+# Uso: cp .env.example .env && docker compose up -d --build
+
+x-iotsim: &iotsim
+  build: .
+  image: iotsim:dev
+  restart: unless-stopped
+  volumes:
+    - ./data:/app/data
+  environment: &iotsim-env
+    IOTSIM_RUN_ID: ${IOTSIM_RUN_ID:-dev}
+    IOTSIM_LOG_LEVEL: ${IOTSIM_LOG_LEVEL:-INFO}
+
+x-sink-env: &sink-env
+  IOTSIM_INFLUX_URL: http://influxdb:8086
+  IOTSIM_INFLUX_TOKEN: ${INFLUX_TOKEN}
+  IOTSIM_INFLUX_ORG: ${INFLUX_ORG}
+  IOTSIM_INFLUX_BUCKET: ${INFLUX_BUCKET}
+
+x-device-env: &device-env
+  IOTSIM_DEVICES: ${IOTSIM_DEVICES:-10}
+  IOTSIM_INTERVAL_S: ${IOTSIM_INTERVAL_S:-1.0}
+  IOTSIM_SEED: ${IOTSIM_SEED:-42}
+
+services:
+  # ---------- Observabilidade ----------
+  influxdb:
+    image: influxdb:2.7.12
+    restart: unless-stopped
+    ports: ["8086:8086"]
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USER}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 5s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana:12.2.1
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_ORG: ${INFLUX_ORG}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      influxdb: { condition: service_healthy }
+
+  # ---------- MQTT ----------
+  mosquitto:
+    image: eclipse-mosquitto:2.0.22
+    restart: unless-stopped
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  mqtt-consumer:
+    <<: *iotsim
+    command: ["iotsim-mqtt-consumer"]
+    environment:
+      <<: [*iotsim-env, *sink-env]
+      IOTSIM_BROKER_HOST: mosquitto
+    depends_on: [mosquitto, influxdb]
+
+  mqtt-devices:
+    <<: *iotsim
+    command: ["iotsim-device"]
+    environment:
+      <<: [*iotsim-env, *device-env]
+      IOTSIM_PROTOCOL: mqtt
+      IOTSIM_HOST: mosquitto
+      IOTSIM_MQTT_QOS: ${IOTSIM_MQTT_QOS:-0}
+    depends_on: [mqtt-consumer]
+
+  # ---------- HTTP ----------
+  http-server:
+    <<: *iotsim
+    command: ["iotsim-http-server"]
+    environment:
+      <<: [*iotsim-env, *sink-env]
+      IOTSIM_LISTEN_PORT: 8080
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 5s
+      retries: 20
+    depends_on: [influxdb]
+
+  http-devices:
+    <<: *iotsim
+    command: ["iotsim-device"]
+    environment:
+      <<: [*iotsim-env, *device-env]
+      IOTSIM_PROTOCOL: http
+      IOTSIM_HOST: http-server
+      IOTSIM_PORT: 8080
+    depends_on:
+      http-server: { condition: service_healthy }
+
+volumes:
+  influxdb-data:
+  grafana-data:
