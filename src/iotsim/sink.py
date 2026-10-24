@@ -18,15 +18,34 @@ from iotsim.message import Reading
 log = logging.getLogger(__name__)
 
 RECV_HEADER = ("run_id", "protocol", "device_id", "seq", "sent_ns", "recv_ns", "payload_bytes")
-SENT_HEADER = ("run_id", "protocol", "device_id", "seq", "sent_ns", "ack_ns", "ok", "error")
+SENT_HEADER = (
+    "run_id",
+    "protocol",
+    "device_id",
+    "seq",
+    "sent_ns",
+    "ack_ns",
+    "payload_bytes",
+    "ok",
+    "error",
+)
 
 
 class CsvRecorder:
-    """Escritor CSV em modo append; cria o cabeçalho apenas em arquivo novo."""
+    """Escritor CSV em modo append; cria o cabeçalho apenas em arquivo novo.
+
+    Recusa continuar um arquivo com cabeçalho diferente, para não misturar colunas
+    (ex.: dados de uma versão anterior com o mesmo run_id).
+    """
 
     def __init__(self, path: Path, header: tuple[str, ...]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         is_new = not path.exists() or path.stat().st_size == 0
+        if not is_new:
+            with path.open(newline="", encoding="utf-8") as f:
+                existing = tuple(next(csv.reader(f), ()))
+            if existing != header:
+                raise ValueError(f"{path}: cabeçalho diferente do esperado; use outro run_id")
         self._file = path.open("a", newline="", encoding="utf-8")
         self._writer = csv.writer(self._file)
         if is_new:

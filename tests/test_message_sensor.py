@@ -1,5 +1,10 @@
+from pathlib import Path
+
+import pytest
+
 from iotsim.message import Reading
 from iotsim.sensors import TemperatureSensor
+from iotsim.sink import CsvRecorder
 
 
 def test_reading_roundtrip() -> None:
@@ -21,3 +26,11 @@ def test_sensor_is_deterministic_and_bounded() -> None:
     seq2 = [s2.read() for _ in range(1000)]
     assert seq1 == seq2
     assert all(15.0 <= v <= 35.0 for v in seq1)
+
+
+def test_csv_recorder_rejects_different_header(tmp_path: Path) -> None:
+    path = tmp_path / "x.csv"
+    CsvRecorder(path, ("a", "b")).close()
+    CsvRecorder(path, ("a", "b")).close()  # mesmo cabeçalho: continua o arquivo
+    with pytest.raises(ValueError, match="cabeçalho"):
+        CsvRecorder(path, ("a", "b", "c"))

@@ -75,3 +75,20 @@ async def test_send_failure_is_logged_and_device_continues(tmp_path: Path) -> No
     assert {r["seq"] for r in failed} == {"1"}
     assert all(r["error"] == "ConnectionError" for r in failed)
     assert any(int(r["seq"]) > 1 and r["ok"] == "1" for r in rows)
+
+
+async def test_max_messages_stops_each_device(tmp_path: Path) -> None:
+    settings = DeviceSettings(
+        protocol=Protocol.MQTT,
+        devices=2,
+        interval_s=0.01,
+        max_messages=5,
+        data_dir=tmp_path,
+        run_id="t",
+    )
+    await run_fleet(settings, asyncio.Event(), fake_factory)  # termina sozinho
+
+    per_device: dict[str, int] = {}
+    for _, r in FakeAdapter.sent:
+        per_device[r.device_id] = per_device.get(r.device_id, 0) + 1
+    assert per_device == {"mqtt-0000": 5, "mqtt-0001": 5}

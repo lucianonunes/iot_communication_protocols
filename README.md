@@ -77,6 +77,16 @@ Parâmetros (variáveis `IOTSIM_*` no `.env`): `RUN_ID`, `DEVICES`, `INTERVAL_S`
 `MQTT_QOS`, `COAP_CONFIRMABLE` (CON/NON), `AMQP_CONFIRM` (liquidado/pré-liquidado),
 `LOG_LEVEL`.
 
+## Experimentos
+
+| # | Experimento | Comando | Saída |
+|---|---|---|---|
+| E1 | Bytes e pacotes por mensagem, custo de estabelecimento (com/sem TLS) | `make e1` | `results/e1/<run>/summary.csv` + `.pcap` |
+
+E1: um dispositivo por cenário, em container próprio, com `tshark` no mesmo namespace de
+rede (`nicolaka/netshoot`). Cada cenário envia exatamente N mensagens (`IOTSIM_MAX_MESSAGES`);
+as métricas em regime excluem a primeira e a última mensagem.
+
 ## Estrutura
 
 ```
@@ -88,6 +98,7 @@ src/iotsim/
   adapters/        um ProtocolAdapter por protocolo (lado dispositivo)
   devices/         execução da frota de dispositivos e CLI
   servers/         receptores (servidores e consumidores)
+  experiments/     execução e análise dos experimentos (E1...)
 infra/             Mosquitto, RabbitMQ, provisionamento do Grafana
 scripts/           geração da CA e do certificado do servidor
 tests/             testes (AMQP: integração, requer IOTSIM_TEST_AMQP_URL)

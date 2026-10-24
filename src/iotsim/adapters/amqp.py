@@ -76,6 +76,14 @@ class AmqpAdapter(ProtocolAdapter):
             self._senders[resource] = sender
         # Com AtLeastOnce, send() bloqueia até o broker liquidar (accepted) a entrega.
         sender.send(Message(body=payload, inferred=True))
+        if not self._confirm:
+            # Pré-liquidada, a entrega já nasce liquidada e send() retorna sem processar E/S:
+            # sem isto, as mensagens ficariam no buffer até a próxima operação bloqueante.
+            conn = self._connection.conn
+            transport = conn.transport if conn is not None else None
+            if transport is None:
+                raise RuntimeError("conexão AMQP sem transporte")
+            self._connection.wait(lambda: transport.pending() == 0, msg="enviando pré-liquidada")
 
     def _close_sync(self) -> None:
         if self._connection is not None:

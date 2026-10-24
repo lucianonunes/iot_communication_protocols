@@ -1,4 +1,4 @@
-.PHONY: help install lint typecheck test check certs up up-tls down logs clean
+.PHONY: help install lint typecheck test check certs up up-tls down logs clean e1
 
 help:  ## Lista os alvos disponíveis
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -35,6 +35,12 @@ up-tls: .env certs  ## Sobe a pilha com TLS/DTLS em todos os protocolos
 
 down:  ## Para a pilha (mantém os volumes)
 	docker compose -f compose.yaml -f compose.tls.yaml down
+
+e1:  ## E1 (bytes na rede): roda sem TLS e com TLS, trocando o modo da pilha
+	$(MAKE) up
+	uv run python -m iotsim.experiments.e1_bytes --mode plain
+	$(MAKE) up-tls
+	uv run python -m iotsim.experiments.e1_bytes --mode tls
 
 logs:  ## Acompanha os logs
 	docker compose logs -f --tail 50

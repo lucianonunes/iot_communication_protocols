@@ -227,3 +227,6 @@ data/
 
 # Certificados gerados localmente (scripts/gen-certs.sh)
 infra/certs/
+
+# Resultados de experimentos (pcap e CSV): grandes e regeneráveis
+results/

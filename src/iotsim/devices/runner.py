@@ -22,7 +22,8 @@ CONNECT_ATTEMPTS = 5
 
 
 def device_id_for(settings: DeviceSettings, index: int) -> str:
-    return f"{settings.protocol.value}-{index:04d}"
+    prefix = settings.device_id_prefix or settings.protocol.value
+    return f"{prefix}-{index:04d}"
 
 
 def resource_for(settings: DeviceSettings, device_id: str) -> str:
@@ -69,6 +70,8 @@ async def run_device(
     needs_reconnect = False
     try:
         while not stop.is_set():
+            if settings.max_messages is not None and seq >= settings.max_messages:
+                break
             # Agendamento sem deriva: o instante k é start + k * intervalo.
             delay = start + seq * settings.interval_s - time.monotonic()
             if delay > 0:
@@ -84,9 +87,10 @@ async def run_device(
                 needs_reconnect = not await connect_with_retry(adapter, stop)
 
             reading = Reading(device_id, seq, time.time_ns(), sensor.read())
+            payload = reading.encode()
             ok, error = True, ""
             try:
-                await asyncio.wait_for(adapter.send(resource, reading.encode()), SEND_TIMEOUT_S)
+                await asyncio.wait_for(adapter.send(resource, payload), SEND_TIMEOUT_S)
             except Exception as exc:
                 ok, error = False, type(exc).__name__
                 needs_reconnect = True
@@ -98,6 +102,7 @@ async def run_device(
                     seq,
                     reading.sent_ns,
                     time.time_ns(),
+                    len(payload),
                     int(ok),
                     error,
                 )
@@ -122,8 +127,14 @@ async def run_fleet(
 
     try:
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(flush_periodically())
-            for index in range(settings.devices):
+            flusher = tg.create_task(flush_periodically())
+            devices = [
                 tg.create_task(run_device(settings, index, recorder, stop, factory))
+                for index in range(settings.devices)
+            ]
+            # Com max_messages os dispositivos terminam sozinhos; o flush periódico,
+            # que só para com `stop`, é então cancelado.
+            await asyncio.gather(*devices)
+            flusher.cancel()
     finally:
         recorder.close()
