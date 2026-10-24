@@ -82,10 +82,19 @@ Parâmetros (variáveis `IOTSIM_*` no `.env`): `RUN_ID`, `DEVICES`, `INTERVAL_S`
 | # | Experimento | Comando | Saída |
 |---|---|---|---|
 | E1 | Bytes e pacotes por mensagem, custo de estabelecimento (com/sem TLS) | `make e1` | `results/e1/<run>/summary.csv` + `.pcap` |
+| E2 | Dispositivo sonolento: bytes, pacotes e tempo de rádio por ciclo (com/sem TLS) | `make e2` | `results/e2/<run>/summary.csv` + `.pcap` |
 
 E1: um dispositivo por cenário, em container próprio, com `tshark` no mesmo namespace de
 rede (`nicolaka/netshoot`). Cada cenário envia exatamente N mensagens (`IOTSIM_MAX_MESSAGES`);
 as métricas em regime excluem a primeira e a última mensagem.
+
+E2: mesmo arranjo, com `IOTSIM_SLEEPY=true` — a cada leitura o dispositivo conecta, envia e
+desconecta. Ciclo = do despertar até o despertar seguinte (o primeiro é descartado);
+"tempo de rádio" = do primeiro ao último pacote do ciclo, aproximação do rádio ligado.
+
+Configuração uniforme de rede: todos os servidores usam `TCP_NODELAY` (padrão no RabbitMQ
+e nos servidores asyncio; no Mosquitto, `set_tcp_nodelay true`). Sem isso, o Mosquitto
+retém o CONNACK até o ACK atrasado do cliente (~40 ms por conexão TLS).
 
 ## Estrutura
 

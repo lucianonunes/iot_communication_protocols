@@ -16,18 +16,20 @@ class FakeAdapter(ProtocolAdapter):
 
     sent: ClassVar[list[tuple[str, Reading]]] = []
     fail_seq: ClassVar[int | None] = None
+    events: ClassVar[list[str]] = []
 
     async def connect(self) -> None:
-        return None
+        FakeAdapter.events.append("connect")
 
     async def send(self, resource: str, payload: bytes) -> None:
         reading = Reading.decode(payload)
         if reading.seq == self.fail_seq:
             raise ConnectionError("falha simulada")
         FakeAdapter.sent.append((resource, reading))
+        FakeAdapter.events.append("send")
 
     async def close(self) -> None:
-        return None
+        FakeAdapter.events.append("close")
 
 
 def fake_factory(settings: DeviceSettings, device_id: str) -> ProtocolAdapter:
@@ -38,6 +40,7 @@ def fake_factory(settings: DeviceSettings, device_id: str) -> ProtocolAdapter:
 def _reset() -> None:
     FakeAdapter.sent = []
     FakeAdapter.fail_seq = None
+    FakeAdapter.events = []
 
 
 async def _run(settings: DeviceSettings, seconds: float) -> None:
@@ -92,3 +95,20 @@ async def test_max_messages_stops_each_device(tmp_path: Path) -> None:
     for _, r in FakeAdapter.sent:
         per_device[r.device_id] = per_device.get(r.device_id, 0) + 1
     assert per_device == {"mqtt-0000": 5, "mqtt-0001": 5}
+
+
+async def test_sleepy_device_connects_and_closes_each_cycle(tmp_path: Path) -> None:
+    settings = DeviceSettings(
+        protocol=Protocol.COAP,
+        devices=1,
+        interval_s=0.01,
+        max_messages=3,
+        sleepy=True,
+        data_dir=tmp_path,
+        run_id="t",
+    )
+    await run_fleet(settings, asyncio.Event(), fake_factory)
+
+    # Um ciclo completo por leitura; o fechamento final do runner é idempotente.
+    assert FakeAdapter.events[:9] == ["connect", "send", "close"] * 3
+    assert FakeAdapter.events.count("connect") == 3

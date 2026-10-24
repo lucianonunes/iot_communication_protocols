@@ -30,6 +30,10 @@ class DeviceSettings(CommonSettings):
     devices: int = Field(default=10, ge=1)
     interval_s: float = Field(default=1.0, gt=0)
     duration_s: float | None = Field(default=None, gt=0, description="None = sem fim")
+    sleepy: bool = Field(
+        default=False,
+        description="Dispositivo sonolento: conecta, envia uma leitura e desconecta a cada ciclo",
+    )
     max_messages: int | None = Field(
         default=None, ge=1, description="Encerra cada dispositivo após N envios (None = sem fim)"
     )

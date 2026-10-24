@@ -37,3 +37,25 @@ def test_steady_state_and_setup() -> None:
 def test_requires_enough_messages() -> None:
     with pytest.raises(ValueError):
         compute_metrics(_frames(), [S, 2 * S, 3 * S], payload_bytes=56)
+
+
+def test_cycle_metrics_excludes_first_cycle() -> None:
+    from iotsim.experiments.metrics import compute_cycle_metrics
+
+    frames: list[Frame] = []
+    for k in range(4):  # 4 ciclos em t = 0, 1, 2, 3 s
+        base = k * S
+        size = 999 if k == 0 else 100  # 1º ciclo diferente: deve ser ignorado
+        frames += [
+            Frame(base + 1_000_000, size, True, 40),  # +1 ms
+            Frame(base + 2_000_000, 60, False, 0),
+            Frame(base + 5_000_000, 60, True, 0),  # +5 ms: último pacote do ciclo
+        ]
+    m = compute_cycle_metrics(frames, [k * S for k in range(4)])
+
+    assert m.cycles == 3
+    assert m.wire_bytes_per_cycle == 220
+    assert m.packets_per_cycle == 3
+    assert m.up_l4_per_cycle == 40
+    assert m.radio_ms_mean == 4.0
+    assert m.radio_ms_max == 4.0

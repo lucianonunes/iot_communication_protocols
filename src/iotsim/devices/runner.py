@@ -61,7 +61,8 @@ async def run_device(
     offset = random.Random(settings.seed * 1_000_003 + index).uniform(0, settings.interval_s)
 
     adapter = factory(settings, device_id)
-    if not await connect_with_retry(adapter, stop):
+    # Dispositivo sonolento conecta a cada leitura; os demais mantêm a conexão.
+    if not settings.sleepy and not await connect_with_retry(adapter, stop):
         log.error("%s: desistiu de conectar", device_id)
         return
 
@@ -86,14 +87,22 @@ async def run_device(
                 adapter = factory(settings, device_id)
                 needs_reconnect = not await connect_with_retry(adapter, stop)
 
+            # No modo sonolento, sent_ns marca o despertar: inclui conexão e handshake.
             reading = Reading(device_id, seq, time.time_ns(), sensor.read())
             payload = reading.encode()
             ok, error = True, ""
             try:
+                if settings.sleepy:
+                    adapter = factory(settings, device_id)
+                    await asyncio.wait_for(adapter.connect(), SEND_TIMEOUT_S)
                 await asyncio.wait_for(adapter.send(resource, payload), SEND_TIMEOUT_S)
             except Exception as exc:
                 ok, error = False, type(exc).__name__
-                needs_reconnect = True
+                needs_reconnect = not settings.sleepy
+            finally:
+                if settings.sleepy:
+                    with contextlib.suppress(Exception):
+                        await adapter.close()
             recorder.write(
                 (
                     settings.run_id,

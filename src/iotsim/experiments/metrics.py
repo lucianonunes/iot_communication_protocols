@@ -68,3 +68,53 @@ def compute_metrics(
         setup_wire_bytes=sum(f.wire_bytes for f in before) - wire,
         setup_packets=len(before) - packets,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class CycleMetrics:
+    """Custo de um ciclo do dispositivo sonolento (acorda, conecta, envia, desconecta)."""
+
+    cycles: int
+    wire_bytes_per_cycle: float
+    packets_per_cycle: float
+    up_l4_per_cycle: float
+    down_l4_per_cycle: float
+    radio_ms_mean: float  # primeiro ao último pacote do ciclo: proxy do tempo de rádio ligado
+    radio_ms_p50: float
+    radio_ms_max: float
+
+
+def _quantile(sorted_values: Sequence[float], q: float) -> float:
+    return sorted_values[round(q * (len(sorted_values) - 1))]
+
+
+def compute_cycle_metrics(frames: Sequence[Frame], sent_ns: Sequence[int]) -> CycleMetrics:
+    """Agrupa os quadros por ciclo e calcula médias, excluindo o primeiro ciclo.
+
+    O ciclo k vai de ``sent_ns[k]`` (despertar, antes da conexão) até ``sent_ns[k + 1]``;
+    o último vai até o fim da captura. O primeiro ciclo é excluído por incluir efeitos de
+    partida a frio do processo (carga de bibliotecas, primeiro uso de caches).
+    """
+    if len(sent_ns) < 3:
+        raise ValueError("são necessários ao menos 3 ciclos")
+    bounds = [*sent_ns, max(f.ts_ns for f in frames) + 1]
+    per_cycle: list[list[Frame]] = []
+    for k in range(1, len(sent_ns)):
+        start, end = bounds[k], bounds[k + 1]
+        cycle = [f for f in frames if start <= f.ts_ns < end]
+        if not cycle:
+            raise ValueError(f"ciclo {k} sem quadros capturados")
+        per_cycle.append(cycle)
+
+    n = len(per_cycle)
+    radio = sorted((c[-1].ts_ns - c[0].ts_ns) / 1e6 for c in per_cycle)
+    return CycleMetrics(
+        cycles=n,
+        wire_bytes_per_cycle=sum(f.wire_bytes for c in per_cycle for f in c) / n,
+        packets_per_cycle=sum(len(c) for c in per_cycle) / n,
+        up_l4_per_cycle=sum(f.l4_payload for c in per_cycle for f in c if f.from_device) / n,
+        down_l4_per_cycle=sum(f.l4_payload for c in per_cycle for f in c if not f.from_device) / n,
+        radio_ms_mean=sum(radio) / n,
+        radio_ms_p50=_quantile(radio, 0.5),
+        radio_ms_max=radio[-1],
+    )
