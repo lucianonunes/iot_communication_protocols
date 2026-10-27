@@ -1,0 +1,32 @@
+# Rodadas canônicas usadas no artigo (diretórios em results/, não versionados).
+# Cada experimento lista as rodadas a combinar; `drop` remove linhas inválidas,
+# com o motivo registrado.
+
+[e1]
+# Rodada completa de 23/10; MQTT refeito em 24/10 com set_tcp_nodelay no Mosquitto
+# (bytes idênticos; usa-se a rodada mais recente para os cenários MQTT).
+runs = [
+  "e1/e1-plain-20261023-230719",
+  "e1/e1-tls-20261023-231337",
+  "e1/e1-plain-20261024-082935",
+  "e1/e1-tls-20261024-082729",
+]
+
+[e2]
+runs = ["e2/e2-plain-20261024-083047", "e2/e2-tls-20261024-081838"]
+
+[e3]
+runs = ["e3/e3-20261027-104248"]
+
+[e5]
+runs = [
+  "e5/e5-plain-20261027-125136",
+  "e5/e5-plain-20261027-152048",
+  "e5/e5-tls-20261027-144635",
+]
+
+[[e5.drop]]
+run = "e5/e5-plain-20261027-125136"
+scenario = "coap-con"
+devices = 10
+reason = "Mac em repouso (12:59:18-13:01:27) durante a janela de medição; refeito em e5-plain-20261027-152048"

@@ -86,6 +86,9 @@ Parâmetros (variáveis `IOTSIM_*` no `.env`): `RUN_ID`, `DEVICES`, `INTERVAL_S`
 | E3/E4 | Latência (p50/p95/p99) e entrega por modo de QoS sob perda de 0, 1, 5 e 10% | `make e3` | `results/e3/<run>/summary.csv` + `.pcap` |
 | E5 | Escala: CPU e memória dos servidores com 10, 100 e 1000 dispositivos (com/sem TLS) | `make e5` | `results/e5/<run>/summary.csv` |
 
+Figuras (PDF/PNG) e tabelas (CSV e LaTeX) do artigo: `make report` → `results/report/`.
+As rodadas usadas, e os pontos descartados com o motivo, ficam em `analysis/runs.toml`.
+
 E1: um dispositivo por cenário, em container próprio, com `tshark` no mesmo namespace de
 rede (`nicolaka/netshoot`). Cada cenário envia exatamente N mensagens (`IOTSIM_MAX_MESSAGES`);
 as métricas em regime excluem a primeira e a última mensagem.
