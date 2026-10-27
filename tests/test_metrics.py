@@ -59,3 +59,22 @@ def test_cycle_metrics_excludes_first_cycle() -> None:
     assert m.up_l4_per_cycle == 40
     assert m.radio_ms_mean == 4.0
     assert m.radio_ms_max == 4.0
+
+
+def test_delivery_metrics_counts_losses_and_duplicates() -> None:
+    from iotsim.experiments.metrics import compute_delivery_metrics
+
+    ms = 1_000_000
+    sent = [("d", 0, 1), ("d", 1, 1), ("d", 2, 0), ("d", 3, 1)]
+    received = [
+        ("d", 0, 0, 2 * ms),
+        ("d", 1, 0, 4 * ms),
+        ("d", 1, 0, 9 * ms),  # duplicata: mantém a primeira chegada
+        ("d", 3, 0, 6 * ms),
+        ("outro", 0, 0, 1 * ms),  # não pertence ao cenário
+    ]
+    m = compute_delivery_metrics(sent, received)
+
+    assert (m.sent, m.sender_ok, m.delivered, m.duplicates) == (4, 3, 3, 1)
+    assert m.delivery_ratio == 0.75
+    assert (m.latency_ms_p50, m.latency_ms_max) == (4.0, 6.0)

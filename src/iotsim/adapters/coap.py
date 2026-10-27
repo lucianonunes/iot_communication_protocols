@@ -5,6 +5,7 @@ Com ``tls=True`` usa DTLS 1.2 com chave pré-compartilhada (PSK), via tinydtls (
 usados aqui porque o transporte DTLS do aiocoap só suporta PSK.
 """
 
+import asyncio
 from pathlib import Path
 
 from aiocoap import POST, Context, Message, Reliable, Unreliable
@@ -28,6 +29,7 @@ class CoapAdapter(ProtocolAdapter):
         *,
         psk: str | None = None,
         psk_identity: str = "iotsim",
+        non_response_wait_s: float | None = None,
     ) -> None:
         if tls and not psk:
             raise ValueError("CoAP sobre DTLS requer a chave pré-compartilhada (IOTSIM_COAP_PSK)")
@@ -35,6 +37,10 @@ class CoapAdapter(ProtocolAdapter):
         self._tuning = Reliable if confirmable else Unreliable
         self._psk = psk
         self._psk_identity = psk_identity
+        # NON não tem retransmissão: perdida a requisição ou a resposta, o aiocoap espera a
+        # resposta indefinidamente. Com este limite, o envio é dado por concluído (sem erro)
+        # e a entrega passa a ser medida apenas no servidor.
+        self._non_response_wait_s = None if confirmable else non_response_wait_s
         self._scheme = "coaps" if tls else "coap"
         # Mesma origem nas requisições e na chave das credenciais: o aiocoap casa a
         # credencial pela URI completa, que inclui a porta.
@@ -70,7 +76,14 @@ class CoapAdapter(ProtocolAdapter):
             payload=payload,
         )
         # Em CON, a resposta chega no ACK (piggybacked); em NON, numa mensagem NON separada.
-        response = await self._context.request(request).response
+        pending = self._context.request(request).response
+        if self._non_response_wait_s is None:
+            response = await pending
+        else:
+            try:
+                response = await asyncio.wait_for(pending, self._non_response_wait_s)
+            except TimeoutError:
+                return
         self._remote = response.remote
         if not response.code.is_successful():
             raise CoapSendError(str(response.code))

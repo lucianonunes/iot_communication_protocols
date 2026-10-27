@@ -83,6 +83,7 @@ Parâmetros (variáveis `IOTSIM_*` no `.env`): `RUN_ID`, `DEVICES`, `INTERVAL_S`
 |---|---|---|---|
 | E1 | Bytes e pacotes por mensagem, custo de estabelecimento (com/sem TLS) | `make e1` | `results/e1/<run>/summary.csv` + `.pcap` |
 | E2 | Dispositivo sonolento: bytes, pacotes e tempo de rádio por ciclo (com/sem TLS) | `make e2` | `results/e2/<run>/summary.csv` + `.pcap` |
+| E3/E4 | Latência (p50/p95/p99) e entrega por modo de QoS sob perda de 0, 1, 5 e 10% | `make e3` | `results/e3/<run>/summary.csv` + `.pcap` |
 
 E1: um dispositivo por cenário, em container próprio, com `tshark` no mesmo namespace de
 rede (`nicolaka/netshoot`). Cada cenário envia exatamente N mensagens (`IOTSIM_MAX_MESSAGES`);
@@ -91,6 +92,11 @@ as métricas em regime excluem a primeira e a última mensagem.
 E2: mesmo arranjo, com `IOTSIM_SLEEPY=true` — a cada leitura o dispositivo conecta, envia e
 desconecta. Ciclo = do despertar até o despertar seguinte (o primeiro é descartado);
 "tempo de rádio" = do primeiro ao último pacote do ciclo, aproximação do rádio ligado.
+
+E3/E4: perda de pacotes IP com `tc netem` (semente fixa) nos dois sentidos — na saída do
+dispositivo e na saída do servidor, filtrada pelo IP do dispositivo (o kernel do Docker
+Desktop não tem `ifb`). 100 mensagens por combinação, sem TLS. Entrega e latência medidas
+no receptor; o CoAP NON espera a resposta por no máximo um intervalo.
 
 Configuração uniforme de rede: todos os servidores usam `TCP_NODELAY` (padrão no RabbitMQ
 e nos servidores asyncio; no Mosquitto, `set_tcp_nodelay true`). Sem isso, o Mosquitto

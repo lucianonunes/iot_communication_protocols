@@ -9,6 +9,7 @@ import logging
 import shlex
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -68,14 +69,14 @@ def _run(cmd: list[str], timeout: float | None = None) -> subprocess.CompletedPr
     return subprocess.run(cmd, check=True, text=True, capture_output=True, timeout=timeout)
 
 
-def _compose_container(service: str) -> str:
+def compose_container(service: str) -> str:
     cid = _run(["docker", "compose", "ps", "-q", service]).stdout.strip()
     if not cid:
         raise RuntimeError(f"serviço {service} não está em execução (rode `make up`)")
     return cid
 
 
-def _container_ip(cid: str) -> str:
+def container_ip(cid: str) -> str:
     out = _run(
         [
             "docker",
@@ -108,15 +109,62 @@ def _env_value(name: str, env_file: Path) -> str:
     raise KeyError(f"{name} ausente em {env_file}")
 
 
+def container_env(container: str) -> dict[str, str]:
+    """Variáveis de ambiente com que o container foi criado."""
+    out = _run(["docker", "inspect", "-f", "{{range .Config.Env}}{{println .}}{{end}}", container])
+    return dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line)
+
+
 def check_stack_mode(tls: bool) -> None:
     """Confere se os servidores de modo único estão no modo pedido."""
     for service in ("http-server", "coap-server", "ws-server"):
-        cid = _compose_container(service)
-        env = _run(["docker", "inspect", "-f", "{{range .Config.Env}}{{println .}}{{end}}", cid])
-        active = "IOTSIM_TLS=true" in env.stdout.splitlines()
+        active = container_env(compose_container(service)).get("IOTSIM_TLS") == "true"
         if active != tls:
             hint = "make up-tls" if tls else "make up"
             raise RuntimeError(f"{service} está com TLS={active}; suba a pilha com `{hint}`")
+
+
+def _tc(container: str, script: str) -> None:
+    """Executa comandos ``tc`` no namespace de rede de um container."""
+    _run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--net",
+            f"container:{container}",
+            "--cap-add",
+            "NET_ADMIN",
+            NETSHOOT,
+            "sh",
+            "-ec",
+            script,
+        ]
+    )
+
+
+def apply_loss(container: str, peer_ip: str, loss_pct: float, seed: int) -> None:
+    """Descarta ``loss_pct``% dos pacotes IP que ``container`` envia a ``peer_ip`` (netem).
+
+    O kernel da VM do Docker Desktop não tem ``ifb``, então a perda é sempre aplicada na
+    saída: no dispositivo (sentido de ida) e no servidor (volta, filtrada pelo IP do
+    dispositivo, sem afetar os demais clientes). Só pacotes IP são descartados; o ARP passa,
+    pois sua perda gera falhas de rota que não pertencem ao protocolo avaliado.
+    """
+    clear_loss(container)
+    _tc(
+        container,
+        "tc qdisc add dev eth0 root handle 1: prio bands 4 "
+        "priomap 1 2 2 2 1 2 0 0 1 1 1 1 1 1 1 1\n"
+        f"tc qdisc add dev eth0 parent 1:4 handle 40: netem loss {loss_pct}% seed {seed}\n"
+        f"tc filter add dev eth0 parent 1: protocol ip prio 1 u32 match ip dst {peer_ip}/32 "
+        "flowid 1:4",
+    )
+
+
+def clear_loss(container: str) -> None:
+    """Remove a disciplina de fila raiz (idempotente)."""
+    _tc(container, "tc qdisc del dev eth0 root 2>/dev/null || true")
 
 
 def _cleanup() -> None:
@@ -168,11 +216,19 @@ def run_scenario(
     out_dir: Path,
     env_file: Path,
     extra_env: dict[str, str] | None = None,
+    on_device_ready: Callable[[str], None] | None = None,
+    run_timeout_s: float | None = None,
+    capture_name: str | None = None,
 ) -> tuple[Path, str]:
-    """Executa um cenário e devolve a captura (pcap) e o IP do dispositivo."""
-    server = _compose_container(scenario.server)
+    """Executa um cenário e devolve a captura (pcap) e o IP do dispositivo.
+
+    ``on_device_ready`` recebe o IP do dispositivo antes de o simulador começar (ex.: para
+    aplicar perda de pacotes); ``run_timeout_s`` limita a execução do simulador;
+    ``capture_name`` nomeia o pcap (padrão: nome do cenário).
+    """
+    server = compose_container(scenario.server)
     network = _network(server)
-    pcap = out_dir / f"{scenario.name}.pcap"
+    pcap = out_dir / f"{capture_name or scenario.name}.pcap"
     data_dir = (out_dir / "device").resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     _cleanup()
@@ -209,8 +265,8 @@ def run_scenario(
     )
     try:
         # 2) tshark no mesmo namespace, gravando apenas o tráfego com o servidor.
-        device_ip = _container_ip(DEVICE)
-        server_ip = _container_ip(server)
+        device_ip = container_ip(DEVICE)
+        server_ip = container_ip(server)
         _run(
             [
                 "docker",
@@ -238,9 +294,12 @@ def run_scenario(
             ]
         )
         time.sleep(2.0)  # tshark pronto antes do primeiro pacote
+        if on_device_ready is not None:
+            on_device_ready(device_ip)
 
-        # 3) Executa o simulador e aguarda o término (duração definida no ambiente).
-        _run(["docker", "exec", DEVICE, "iotsim-device"], timeout=messages * interval_s + 60)
+        # 3) Executa o simulador e aguarda o término (número de mensagens no ambiente).
+        timeout = run_timeout_s if run_timeout_s is not None else messages * interval_s + 60
+        _run(["docker", "exec", DEVICE, "iotsim-device"], timeout=timeout)
         time.sleep(2.0)  # pacotes finais (FIN/close) antes de parar a captura
     finally:
         subprocess.run(["docker", "stop", "-t", "5", SNIFFER], capture_output=True, check=False)

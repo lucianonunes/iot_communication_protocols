@@ -118,3 +118,57 @@ def compute_cycle_metrics(frames: Sequence[Frame], sent_ns: Sequence[int]) -> Cy
         radio_ms_p50=_quantile(radio, 0.5),
         radio_ms_max=radio[-1],
     )
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryMetrics:
+    """Latência fim a fim e entrega de um cenário (E3/E4)."""
+
+    sent: int  # envios tentados pelo dispositivo
+    sender_ok: int  # envios que o dispositivo considerou concluídos
+    delivered: int  # mensagens distintas registradas pelo receptor
+    duplicates: int  # registros repetidos no receptor (ex.: QoS 1, AMQP liquidado)
+    latency_ms_p50: float
+    latency_ms_p95: float
+    latency_ms_p99: float
+    latency_ms_max: float
+
+    @property
+    def delivery_ratio(self) -> float:
+        return self.delivered / self.sent if self.sent else 0.0
+
+
+def compute_delivery_metrics(
+    sent: Sequence[tuple[str, int, int]], received: Sequence[tuple[str, int, int, int]]
+) -> DeliveryMetrics:
+    """Cruza envios ``(device_id, seq, ok)`` e recebimentos ``(device_id, seq, sent_ns, recv_ns)``.
+
+    A latência de cada mensagem usa a primeira chegada; chegadas repetidas contam como
+    duplicatas. Recebimentos de mensagens que não constam dos envios são ignorados.
+    """
+    keys = {(d, s) for d, s, _ in sent}
+    first: dict[tuple[str, int], int] = {}
+    duplicates = 0
+    for device_id, seq, sent_ns, recv_ns in received:
+        key = (device_id, seq)
+        if key not in keys:
+            continue
+        latency = recv_ns - sent_ns
+        if key in first:
+            duplicates += 1
+            first[key] = min(first[key], latency)
+        else:
+            first[key] = latency
+
+    latencies = sorted(v / 1e6 for v in first.values())
+    nan = float("nan")
+    return DeliveryMetrics(
+        sent=len(sent),
+        sender_ok=sum(ok for _, _, ok in sent),
+        delivered=len(first),
+        duplicates=duplicates,
+        latency_ms_p50=_quantile(latencies, 0.50) if latencies else nan,
+        latency_ms_p95=_quantile(latencies, 0.95) if latencies else nan,
+        latency_ms_p99=_quantile(latencies, 0.99) if latencies else nan,
+        latency_ms_max=latencies[-1] if latencies else nan,
+    )

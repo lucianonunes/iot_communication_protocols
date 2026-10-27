@@ -29,6 +29,7 @@ def build_adapter(settings: DeviceSettings, device_id: str) -> ProtocolAdapter:
                 settings.coap_confirmable,
                 psk=settings.coap_psk.get_secret_value() if settings.coap_psk else None,
                 psk_identity=settings.coap_psk_identity,
+                non_response_wait_s=settings.interval_s,
             )
         case Protocol.AMQP:
             from iotsim.adapters.amqp import AmqpAdapter

@@ -112,3 +112,41 @@ async def test_sleepy_device_connects_and_closes_each_cycle(tmp_path: Path) -> N
     # Um ciclo completo por leitura; o fechamento final do runner é idempotente.
     assert FakeAdapter.events[:9] == ["connect", "send", "close"] * 3
     assert FakeAdapter.events.count("connect") == 3
+
+
+class SlowAdapter(FakeAdapter):
+    """Cada envio demora 2,5 intervalos: o dispositivo deve pular as leituras vencidas."""
+
+    async def send(self, resource: str, payload: bytes) -> None:
+        await asyncio.sleep(0.25)
+        await super().send(resource, payload)
+
+
+async def test_slow_send_skips_missed_slots(tmp_path: Path) -> None:
+    settings = DeviceSettings(
+        protocol=Protocol.MQTT, devices=1, interval_s=0.1, data_dir=tmp_path, run_id="t"
+    )
+    stop = asyncio.Event()
+    asyncio.get_running_loop().call_later(1.0, stop.set)
+    await run_fleet(settings, stop, lambda s, d: SlowAdapter(d, s.host, 0, False, None))
+
+    # Sem descarte haveria ~10 envios em rajada; com descarte, um a cada ~0,3 s.
+    assert 3 <= len(FakeAdapter.sent) <= 4
+    assert [r.seq for _, r in FakeAdapter.sent] == list(range(len(FakeAdapter.sent)))
+
+
+async def test_send_timeout_is_configurable(tmp_path: Path) -> None:
+    settings = DeviceSettings(
+        protocol=Protocol.MQTT,
+        devices=1,
+        interval_s=0.05,
+        max_messages=2,
+        send_timeout_s=0.1,
+        data_dir=tmp_path,
+        run_id="t",
+    )
+    await run_fleet(settings, asyncio.Event(), lambda s, d: SlowAdapter(d, s.host, 0, False, None))
+
+    with (tmp_path / "t" / "sent_mqtt.csv").open() as f:
+        rows = list(csv.DictReader(f))
+    assert [r["error"] for r in rows] == ["TimeoutError", "TimeoutError"]

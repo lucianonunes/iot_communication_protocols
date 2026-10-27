@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import logging
+import math
 import random
 import time
 from collections.abc import Callable
@@ -17,7 +18,6 @@ log = logging.getLogger(__name__)
 
 AdapterFactory = Callable[[DeviceSettings, str], ProtocolAdapter]
 
-SEND_TIMEOUT_S = 10.0
 CONNECT_ATTEMPTS = 5
 
 
@@ -67,14 +67,15 @@ async def run_device(
         return
 
     start = time.monotonic() + offset
-    seq = 0
+    seq = 0  # número de envios tentados
+    slot = 0  # instante agendado: start + slot * intervalo
     needs_reconnect = False
     try:
         while not stop.is_set():
             if settings.max_messages is not None and seq >= settings.max_messages:
                 break
             # Agendamento sem deriva: o instante k é start + k * intervalo.
-            delay = start + seq * settings.interval_s - time.monotonic()
+            delay = start + slot * settings.interval_s - time.monotonic()
             if delay > 0:
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), timeout=delay)
@@ -94,8 +95,8 @@ async def run_device(
             try:
                 if settings.sleepy:
                     adapter = factory(settings, device_id)
-                    await asyncio.wait_for(adapter.connect(), SEND_TIMEOUT_S)
-                await asyncio.wait_for(adapter.send(resource, payload), SEND_TIMEOUT_S)
+                    await asyncio.wait_for(adapter.connect(), settings.send_timeout_s)
+                await asyncio.wait_for(adapter.send(resource, payload), settings.send_timeout_s)
             except Exception as exc:
                 ok, error = False, type(exc).__name__
                 needs_reconnect = not settings.sleepy
@@ -117,6 +118,10 @@ async def run_device(
                 )
             )
             seq += 1
+            # Se o envio passou do próximo instante agendado, as leituras vencidas são
+            # descartadas (o dispositivo estava ocupado), em vez de enviadas em rajada.
+            elapsed_slots = math.floor((time.monotonic() - start) / settings.interval_s)
+            slot = max(slot + 1, elapsed_slots + 1)
     finally:
         with contextlib.suppress(Exception):
             await adapter.close()

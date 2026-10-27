@@ -37,6 +37,9 @@ class DeviceSettings(CommonSettings):
     max_messages: int | None = Field(
         default=None, ge=1, description="Encerra cada dispositivo após N envios (None = sem fim)"
     )
+    send_timeout_s: float = Field(
+        default=10.0, gt=0, description="Tempo máximo de conexão e de cada envio"
+    )
     seed: int = 42
     device_id_prefix: str | None = Field(
         default=None, description="Prefixo dos IDs (padrão: nome do protocolo)"

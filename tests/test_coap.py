@@ -43,3 +43,18 @@ async def test_coap_roundtrip_records_reading(tmp_path: Path, confirmable: bool)
 def test_coap_dtls_requires_psk() -> None:
     with pytest.raises(ValueError, match="IOTSIM_COAP_PSK"):
         CoapAdapter("coap-0000", "127.0.0.1", PORT, True, None)
+
+
+async def test_non_without_response_returns_after_wait() -> None:
+    # Socket UDP que recebe e nunca responde: equivale a perder a resposta NON.
+    loop = asyncio.get_running_loop()
+    transport, _ = await loop.create_datagram_endpoint(
+        asyncio.DatagramProtocol, local_addr=("127.0.0.1", PORT + 1)
+    )
+    adapter = CoapAdapter("coap-0000", "127.0.0.1", PORT + 1, False, None, non_response_wait_s=0.3)
+    await adapter.connect()
+    try:
+        await asyncio.wait_for(adapter.send("sensors/coap-0000/temperature", b"{}"), 2)
+    finally:
+        await adapter.close()
+        transport.close()
