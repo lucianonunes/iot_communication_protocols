@@ -134,8 +134,12 @@ def write_table(
     rows: list[list[object]],
     caption: str,
     tex_header: list[str] | None = None,
+    wide: bool = False,
 ) -> None:
-    """Grava a tabela em CSV (dados) e em LaTeX ``booktabs`` (artigo)."""
+    """Grava a tabela em CSV (dados) e em LaTeX ``booktabs`` (artigo).
+
+    ``wide`` usa ``table*`` (largura das duas colunas do artigo).
+    """
     with (out / f"{name}.csv").open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(header)
@@ -150,20 +154,21 @@ def write_table(
         return str(value).replace("%", r"\%").replace("_", r"\_")
 
     cols = tex_header or header
+    env = "table*" if wide else "table"
     lines = [
-        r"\begin{table}[htbp]",
+        rf"\begin{{{env}}}[htbp]",
         r"\centering",
         rf"\caption{{{caption}}}",
         rf"\label{{tab:{name}}}",
         r"\small",
         r"\begin{tabular}{l" + "r" * (len(cols) - 1) + "}",
         r"\toprule",
-        " & ".join(cols) + r" \\",
+        " & ".join(cell(c) for c in cols) + r" \\",
         r"\midrule",
         *[" & ".join(cell(v) for v in r) + r" \\" for r in rows],
         r"\bottomrule",
         r"\end{tabular}",
-        r"\end{table}",
+        rf"\end{{{env}}}",
     ]
     (out / f"{name}.tex").write_text("\n".join(lines) + "\n")
 
@@ -311,6 +316,7 @@ def report_e1(rows: list[Row], out: Path) -> None:
             "Estab.",
             "Estab. TLS",
         ],
+        wide=True,
     )
 
 
@@ -350,6 +356,7 @@ def report_e2(rows: list[Row], out: Path) -> None:
         "Dispositivo sonolento (E2): bytes, pacotes e tempo de rádio (mediana, ms) por ciclo de "
         "conexão, envio e desconexão.",
         tex_header=["Cenário", "Bytes", "Bytes TLS", "Pac.", "Pac. TLS", "Rádio", "Rádio TLS"],
+        wide=True,
     )
 
 
@@ -417,6 +424,7 @@ def report_e3(rows: list[Row], out: Path) -> None:
         "Entrega (\\%) e latência p95 (ms) sob perda de pacotes nos dois sentidos (E3/E4), "
         "sem TLS, 100 mensagens por combinação.",
         tex_header=["Cenário", *[f"Ent. {p}" for p in pct], *[f"p95 {p}" for p in pct]],
+        wide=True,
     )
 
 
@@ -508,6 +516,7 @@ def report_e5(rows: list[Row], out: Path) -> None:
             *[f"Mem. {n}" for n in scales],
             *[f"p95 {n}" for n in scales],
         ],
+        wide=True,
     )
 
 

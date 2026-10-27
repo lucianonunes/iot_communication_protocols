@@ -25,8 +25,16 @@ def test_apply_drops_removes_only_the_invalid_point() -> None:
 
 
 def test_write_table_formats_decimals_for_latex(tmp_path: Path) -> None:
-    write_table(tmp_path, "t", ["a", "b"], [["x_1", 1234.56], ["y", float("nan")]], "Legenda")
+    write_table(
+        tmp_path,
+        "t",
+        ["a", "b"],
+        [["x_1", 1234.56], ["y", float("nan")]],
+        "Legenda",
+        tex_header=["Cenário", "Ent. 5%"],
+    )
     tex = (tmp_path / "t.tex").read_text()
+    assert r"Cenário & Ent. 5\% \\" in tex  # % no cabeçalho seria comentário LaTeX
     assert r"x\_1 & 1\,234,6 \\" in tex
     assert r"y & -- \\" in tex
     assert (tmp_path / "t.csv").read_text().splitlines()[1] == "x_1,1234.56"
