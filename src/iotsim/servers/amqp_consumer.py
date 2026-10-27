@@ -71,9 +71,15 @@ def _receive_loop(
                         receiver.reject()
                         continue
                     payload = bytes(body)
-                    loop.call_soon_threadsafe(
-                        sink.record, Reading.decode(payload), recv_ns, len(payload)
-                    )
+                    try:
+                        reading = Reading.decode(payload)
+                    except (ValueError, KeyError, TypeError) as exc:
+                        # Rejeitada (descartada): sem isto, a mensagem voltaria à fila e
+                        # derrubaria o consumidor a cada nova entrega.
+                        log.warning("mensagem inválida descartada: %r", exc)
+                        receiver.reject()
+                        continue
+                    loop.call_soon_threadsafe(sink.record, reading, recv_ns, len(payload))
                     receiver.accept()
             finally:
                 connection.close()

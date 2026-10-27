@@ -115,6 +115,25 @@ def container_env(container: str) -> dict[str, str]:
     return dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line)
 
 
+def cgroup_read(container: str, name: str) -> str:
+    """Lê um arquivo do cgroup v2 do container (ex.: ``cpu.stat``, ``memory.current``)."""
+    return _run(["docker", "exec", container, "cat", f"/sys/fs/cgroup/{name}"]).stdout
+
+
+def cpu_usage_usec(container: str) -> int:
+    """CPU acumulada do container, em microssegundos (``usage_usec`` do cgroup v2)."""
+    for line in cgroup_read(container, "cpu.stat").splitlines():
+        key, _, value = line.partition(" ")
+        if key == "usage_usec":
+            return int(value)
+    raise RuntimeError(f"usage_usec ausente no cgroup de {container}")
+
+
+def memory_bytes(container: str) -> int:
+    """Memória em uso pelo container (``memory.current`` do cgroup v2)."""
+    return int(cgroup_read(container, "memory.current"))
+
+
 def check_stack_mode(tls: bool) -> None:
     """Confere se os servidores de modo único estão no modo pedido."""
     for service in ("http-server", "coap-server", "ws-server"):
@@ -167,7 +186,7 @@ def clear_loss(container: str) -> None:
     _tc(container, "tc qdisc del dev eth0 root 2>/dev/null || true")
 
 
-def _cleanup() -> None:
+def cleanup() -> None:
     subprocess.run(["docker", "rm", "-f", DEVICE, SNIFFER], capture_output=True, check=False)
 
 
@@ -207,7 +226,7 @@ def _device_env(
     return args
 
 
-def run_scenario(
+def start_device(
     scenario: Scenario,
     run_id: str,
     device_prefix: str,
@@ -216,25 +235,17 @@ def run_scenario(
     out_dir: Path,
     env_file: Path,
     extra_env: dict[str, str] | None = None,
-    on_device_ready: Callable[[str], None] | None = None,
-    run_timeout_s: float | None = None,
-    capture_name: str | None = None,
-) -> tuple[Path, str]:
-    """Executa um cenário e devolve a captura (pcap) e o IP do dispositivo.
+) -> str:
+    """Cria o container do dispositivo, parado em ``sleep``, e devolve seu IP.
 
-    ``on_device_ready`` recebe o IP do dispositivo antes de o simulador começar (ex.: para
-    aplicar perda de pacotes); ``run_timeout_s`` limita a execução do simulador;
-    ``capture_name`` nomeia o pcap (padrão: nome do cenário).
+    O simulador só começa com ``docker exec DEVICE iotsim-device``: assim o namespace de
+    rede existe antes (para captura ou perda de pacotes). O CSV de envios vai para
+    ``out_dir/device/<run_id>/``.
     """
     server = compose_container(scenario.server)
-    network = _network(server)
-    pcap = out_dir / f"{capture_name or scenario.name}.pcap"
     data_dir = (out_dir / "device").resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
-    _cleanup()
-
-    # 1) Container do dispositivo, ainda parado em `sleep`: fixa o namespace de rede
-    #    antes de a captura começar, para registrar desde o primeiro pacote.
+    cleanup()
     _run(
         [
             "docker",
@@ -243,7 +254,7 @@ def run_scenario(
             "--name",
             DEVICE,
             "--network",
-            network,
+            _network(server),
             "-v",
             f"{(Path('infra/certs')).resolve()}:/app/certs:ro",
             "-v",
@@ -263,10 +274,35 @@ def run_scenario(
             "infinity",
         ]
     )
+    return container_ip(DEVICE)
+
+
+def run_scenario(
+    scenario: Scenario,
+    run_id: str,
+    device_prefix: str,
+    messages: int,
+    interval_s: float,
+    out_dir: Path,
+    env_file: Path,
+    extra_env: dict[str, str] | None = None,
+    on_device_ready: Callable[[str], None] | None = None,
+    run_timeout_s: float | None = None,
+    capture_name: str | None = None,
+) -> tuple[Path, str]:
+    """Executa um cenário e devolve a captura (pcap) e o IP do dispositivo.
+
+    ``on_device_ready`` recebe o IP do dispositivo antes de o simulador começar (ex.: para
+    aplicar perda de pacotes); ``run_timeout_s`` limita a execução do simulador;
+    ``capture_name`` nomeia o pcap (padrão: nome do cenário).
+    """
+    pcap = out_dir / f"{capture_name or scenario.name}.pcap"
+    device_ip = start_device(
+        scenario, run_id, device_prefix, messages, interval_s, out_dir, env_file, extra_env
+    )
     try:
-        # 2) tshark no mesmo namespace, gravando apenas o tráfego com o servidor.
-        device_ip = container_ip(DEVICE)
-        server_ip = container_ip(server)
+        # tshark no mesmo namespace, gravando apenas o tráfego com o servidor.
+        server_ip = container_ip(compose_container(scenario.server))
         _run(
             [
                 "docker",
@@ -297,13 +333,13 @@ def run_scenario(
         if on_device_ready is not None:
             on_device_ready(device_ip)
 
-        # 3) Executa o simulador e aguarda o término (número de mensagens no ambiente).
+        # Executa o simulador e aguarda o término (número de mensagens no ambiente).
         timeout = run_timeout_s if run_timeout_s is not None else messages * interval_s + 60
         _run(["docker", "exec", DEVICE, "iotsim-device"], timeout=timeout)
         time.sleep(2.0)  # pacotes finais (FIN/close) antes de parar a captura
     finally:
         subprocess.run(["docker", "stop", "-t", "5", SNIFFER], capture_output=True, check=False)
-        _cleanup()
+        cleanup()
     return pcap, device_ip
 
 

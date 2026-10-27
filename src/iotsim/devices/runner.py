@@ -57,16 +57,22 @@ async def run_device(
     device_id = device_id_for(settings, index)
     resource = resource_for(settings, device_id)
     sensor = TemperatureSensor(seed=settings.seed + index)
-    # Defasagem inicial determinística: evita que todos os dispositivos enviem no mesmo instante.
+    # Defasagem inicial determinística: cada dispositivo liga (e conecta) num instante
+    # diferente, como num parque real; sem ela, N conexões simultâneas transbordariam a
+    # fila de conexões pendentes (backlog) dos servidores.
     offset = random.Random(settings.seed * 1_000_003 + index).uniform(0, settings.interval_s)
+    with contextlib.suppress(TimeoutError):
+        await asyncio.wait_for(stop.wait(), timeout=offset)
+    if stop.is_set():
+        return
 
+    start = time.monotonic()
     adapter = factory(settings, device_id)
     # Dispositivo sonolento conecta a cada leitura; os demais mantêm a conexão.
     if not settings.sleepy and not await connect_with_retry(adapter, stop):
         log.error("%s: desistiu de conectar", device_id)
         return
 
-    start = time.monotonic() + offset
     seq = 0  # número de envios tentados
     slot = 0  # instante agendado: start + slot * intervalo
     needs_reconnect = False

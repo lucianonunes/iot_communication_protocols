@@ -1,4 +1,4 @@
-.PHONY: help install lint typecheck test check certs up up-tls down logs clean e1 e2 e3
+.PHONY: help install lint typecheck test check certs up up-tls down logs clean e1 e2 e3 e5
 
 help:  ## Lista os alvos disponíveis
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -51,6 +51,12 @@ e2:  ## E2 (dispositivo sonolento): roda sem TLS e com TLS, trocando o modo da p
 e3:  ## E3/E4 (latência e entrega sob perda de 0, 1, 5 e 10%), pilha sem TLS
 	$(MAKE) up
 	uv run python -m iotsim.experiments.e3_loss
+
+e5:  ## E5 (escala: 10/100/1000 dispositivos): roda sem TLS e com TLS
+	$(MAKE) up
+	uv run python -m iotsim.experiments.e5_scale --mode plain
+	$(MAKE) up-tls
+	uv run python -m iotsim.experiments.e5_scale --mode tls
 
 logs:  ## Acompanha os logs
 	docker compose logs -f --tail 50

@@ -51,7 +51,12 @@ async def consume(settings: ReceiverSettings, stop: asyncio.Event) -> None:
                         payload = message.payload
                         if not isinstance(payload, bytes | bytearray):
                             continue
-                        sink.record(Reading.decode(payload), recv_ns, len(payload))
+                        try:
+                            reading = Reading.decode(payload)
+                        except (ValueError, KeyError, TypeError) as exc:
+                            log.warning("mensagem inválida descartada: %r", exc)
+                            continue
+                        sink.record(reading, recv_ns, len(payload))
             except aiomqtt.MqttError as exc:
                 log.warning("conexão com o broker perdida: %s", exc)
                 await asyncio.sleep(RECONNECT_DELAY_S)
